@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib
 import os
 import re
 from typing import Any
@@ -8,6 +9,18 @@ from typing import Any
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+SUPPORTED_PROVIDERS = {"openai", "google", "ollama"}
+
+
+def resolve_provider(provider: str | None = None) -> str:
+    effective_provider = (provider or os.getenv("LLM_PROVIDER") or "google").strip().lower()
+    if effective_provider not in SUPPORTED_PROVIDERS:
+        raise ValueError(
+            f"Unsupported provider: {effective_provider!r}. Supported providers: {sorted(SUPPORTED_PROVIDERS)}"
+        )
+    return effective_provider
 
 
 def normalize_content(raw: Any) -> str:
@@ -28,10 +41,20 @@ def normalize_content(raw: Any) -> str:
 
 def build_chat_model(
     *,
-    provider: str = "google",
+    provider: str | None = None,
     model_name: str | None = None,
     temperature: float = 0.0,
 ):
+    provider = resolve_provider(provider)
+    if provider == "openai":
+        chat_openai_module = importlib.import_module("langchain_openai")
+        ChatOpenAI = getattr(chat_openai_module, "ChatOpenAI")
+
+        return ChatOpenAI(
+            model=model_name or os.getenv("LLM_MODEL", "gpt-4o-mini"),
+            temperature=temperature,
+            api_key=os.getenv("OPENAI_API_KEY"),
+        )
     if provider == "google":
         from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -48,7 +71,7 @@ def build_chat_model(
             base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
             temperature=temperature,
         )
-    raise ValueError("This lab supports only the `google` and `ollama` providers.")
+    raise ValueError("This lab supports only the `openai`, `google`, and `ollama` providers.")
 
 
 def extract_json_object(raw: Any) -> dict[str, Any]:

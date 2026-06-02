@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import os
 import sys
 import unicodedata
 from dataclasses import dataclass
@@ -13,7 +14,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from src.core.llm import judge_answer_with_llm
+from src.core.llm import judge_answer_with_llm, resolve_provider
 
 ALLOWED_WEIGHT_KEYS = {"json_output", "tools", "llm_judge"}
 IGNORED_EXPECTED_KEYS = {"created_at"}
@@ -249,11 +250,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Grade saved JSON output for the order-agent lab")
     parser.add_argument("--module", default="solution.agent.graph")
     parser.add_argument("--cases", default=str(ROOT_DIR / "data" / "graded_cases.json"))
-    parser.add_argument("--provider", default="google", choices=["google", "ollama"])
+    parser.add_argument(
+        "--provider",
+        default=os.getenv("LLM_PROVIDER", "google"),
+        choices=["openai", "google", "ollama"],
+    )
     parser.add_argument("--model-name", default=None)
     parser.add_argument("--today", default="2026-06-01")
     parser.add_argument("--pass-threshold", type=float, default=80.0)
-    parser.add_argument("--judge-provider", default=None, choices=["google", "ollama"])
+    parser.add_argument("--judge-provider", default=None, choices=["openai", "google", "ollama"])
     parser.add_argument("--judge-model-name", default=None)
     args = parser.parse_args()
 
@@ -263,18 +268,24 @@ def main() -> int:
 
     cases = load_cases(Path(args.cases))
     effective_judge_provider = args.judge_provider
+    effective_provider = resolve_provider(args.provider)
     if effective_judge_provider is None and any(case["weights"].get("llm_judge", 0) > 0 for case in cases):
-        effective_judge_provider = args.provider
+        effective_judge_provider = effective_provider
 
     scores: list[CaseScore] = []
     for case in cases:
         raw_result = module.run_agent(
             case["query"],
-            provider=args.provider,
+            provider=effective_provider,
             model_name=args.model_name,
             today=args.today,
         )
-        result = coerce_result(raw_result, query=case["query"], provider=args.provider, model_name=args.model_name)
+        result = coerce_result(
+            raw_result,
+            query=case["query"],
+            provider=effective_provider,
+            model_name=args.model_name,
+        )
         scores.append(
             grade_result(
                 result,

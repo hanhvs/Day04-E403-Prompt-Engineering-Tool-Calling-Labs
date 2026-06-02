@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import random
 import os
+import time
 import sys
 import unicodedata
 from dataclasses import dataclass
@@ -246,6 +248,46 @@ def summarize_scores(scores: list[CaseScore]) -> dict[str, Any]:
     }
 
 
+def _is_rate_limit_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return (
+        "rate limit" in message
+        or "rate_limit" in message
+        or "429" in message
+        or exc.__class__.__name__ == "RateLimitError"
+    )
+
+
+def call_with_rate_limit_retry(
+    *,
+    call: Any,
+    call_name: str,
+    max_retries: int,
+    backoff_base_seconds: float,
+    backoff_max_seconds: float,
+    jitter_seconds: float,
+) -> Any:
+    attempt = 0
+    while True:
+        try:
+            return call()
+        except Exception as exc:
+            if not _is_rate_limit_error(exc) or attempt >= max_retries:
+                raise
+
+            sleep_for = min(backoff_max_seconds, backoff_base_seconds * (2**attempt))
+            sleep_for += random.uniform(0, max(0.0, jitter_seconds))
+            print(
+                (
+                    f"[warn] Rate limit hit during {call_name} retry {attempt + 1}/{max_retries}; "
+                    f"sleeping {sleep_for:.2f}s before retry."
+                ),
+                file=sys.stderr,
+            )
+            time.sleep(sleep_for)
+            attempt += 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Grade saved JSON output for the order-agent lab")
     parser.add_argument("--module", default="solution.agent.graph")
@@ -260,6 +302,15 @@ def main() -> int:
     parser.add_argument("--pass-threshold", type=float, default=80.0)
     parser.add_argument("--judge-provider", default=None, choices=["openai", "google", "ollama"])
     parser.add_argument("--judge-model-name", default=None)
+    parser.add_argument("--max-retries", type=int, default=6)
+    parser.add_argument("--backoff-base-seconds", type=float, default=0.8)
+    parser.add_argument("--backoff-max-seconds", type=float, default=8.0)
+    parser.add_argument("--backoff-jitter-seconds", type=float, default=0.3)
+    parser.add_argument(
+        "--output-json",
+        default=None,
+        help="Optional path to save scoring summary as JSON.",
+    )
     args = parser.parse_args()
 
     module = importlib.import_module(args.module)
@@ -274,11 +325,18 @@ def main() -> int:
 
     scores: list[CaseScore] = []
     for case in cases:
-        raw_result = module.run_agent(
-            case["query"],
-            provider=effective_provider,
-            model_name=args.model_name,
-            today=args.today,
+        raw_result = call_with_rate_limit_retry(
+            call=lambda: module.run_agent(
+                case["query"],
+                provider=effective_provider,
+                model_name=args.model_name,
+                today=args.today,
+            ),
+            call_name="run_agent",
+            max_retries=max(0, args.max_retries),
+            backoff_base_seconds=max(0.0, args.backoff_base_seconds),
+            backoff_max_seconds=max(0.0, args.backoff_max_seconds),
+            jitter_seconds=max(0.0, args.backoff_jitter_seconds),
         )
         result = coerce_result(
             raw_result,
@@ -287,16 +345,30 @@ def main() -> int:
             model_name=args.model_name,
         )
         scores.append(
-            grade_result(
-                result,
-                case,
-                judge_provider=effective_judge_provider,
-                judge_model_name=args.judge_model_name,
+            call_with_rate_limit_retry(
+                call=lambda: grade_result(
+                    result,
+                    case,
+                    judge_provider=effective_judge_provider,
+                    judge_model_name=args.judge_model_name,
+                ),
+                call_name="llm_judge",
+                max_retries=max(0, args.max_retries),
+                backoff_base_seconds=max(0.0, args.backoff_base_seconds),
+                backoff_max_seconds=max(0.0, args.backoff_max_seconds),
+                jitter_seconds=max(0.0, args.backoff_jitter_seconds),
             )
         )
 
     summary = summarize_scores(scores)
-    print(json.dumps(summary, indent=2, ensure_ascii=False))
+    summary_text = json.dumps(summary, indent=2, ensure_ascii=False)
+    print(summary_text)
+    if args.output_json:
+        output_path = Path(args.output_json)
+        if not output_path.is_absolute():
+            output_path = ROOT_DIR / output_path
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(summary_text + "\n", encoding="utf-8")
     return 0 if summary["overall_score"] >= args.pass_threshold else 1
 
 

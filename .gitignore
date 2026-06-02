@@ -10,3 +10,5 @@ solution/
 solutions/
 orderdesk_langgraph_lab.egg-info/
 outputs/
+*.html
+!index.html

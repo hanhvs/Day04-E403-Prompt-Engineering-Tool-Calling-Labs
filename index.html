@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OrderDesk Lab Tester</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 980px; margin: 24px auto; color: #111827; }
+    h1 { margin-bottom: 8px; }
+    .muted { color: #6b7280; margin-bottom: 16px; }
+    label { display: block; margin: 10px 0 6px; font-weight: 600; }
+    textarea, input, select { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; }
+    textarea { min-height: 120px; resize: vertical; }
+    button { margin-top: 14px; padding: 10px 14px; border: 0; border-radius: 8px; background: #2563eb; color: #fff; cursor: pointer; }
+    button:disabled { background: #93c5fd; cursor: not-allowed; }
+    .card { margin-top: 16px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; }
+    pre { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; overflow: auto; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  </style>
+</head>
+<body>
+  <h1>OrderDesk Lab Tester</h1>
+  <div class="muted">UI test nhanh cho <code>src.agent.graph.run_agent()</code></div>
+
+  <label for="query">Query</label>
+  <textarea id="query" placeholder="Nhập query test...">Tạo đơn hàng cho Nguyễn Lan Anh, số điện thoại 0901234567, email lananh@example.com, giao đến 18 Nguyễn Huệ, Quận 1, TP.HCM. Tôi cần 1 ASUS ROG Zephyrus G14, 2 Logitech Pebble 2 M350s và 1 LG UltraGear 27GP850-B.</textarea>
+
+  <div class="row">
+    <div>
+      <label for="provider">Provider</label>
+      <select id="provider">
+        <option value="openai" selected>openai</option>
+        <option value="google">google</option>
+        <option value="ollama">ollama</option>
+      </select>
+    </div>
+    <div>
+      <label for="today">Today</label>
+      <input id="today" value="2026-06-01" />
+    </div>
+  </div>
+
+  <button id="runBtn">Run test</button>
+
+  <div class="card">
+    <strong>Final answer</strong>
+    <pre id="finalAnswer">Chưa có kết quả.</pre>
+  </div>
+
+  <div class="card">
+    <strong>Tool calls</strong>
+    <pre id="toolCalls">[]</pre>
+  </div>
+
+  <div class="card">
+    <strong>Saved order</strong>
+    <pre id="savedOrder">null</pre>
+  </div>
+
+  <script>
+    const runBtn = document.getElementById("runBtn");
+    const queryEl = document.getElementById("query");
+    const providerEl = document.getElementById("provider");
+    const todayEl = document.getElementById("today");
+    const finalAnswerEl = document.getElementById("finalAnswer");
+    const toolCallsEl = document.getElementById("toolCalls");
+    const savedOrderEl = document.getElementById("savedOrder");
+
+    runBtn.addEventListener("click", async () => {
+      const query = queryEl.value.trim();
+      if (!query) {
+        alert("Query không được để trống.");
+        return;
+      }
+
+      runBtn.disabled = true;
+      finalAnswerEl.textContent = "Đang chạy...";
+      toolCallsEl.textContent = "Đang chạy...";
+      savedOrderEl.textContent = "Đang chạy...";
+
+      try {
+        const response = await fetch("/api/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query,
+            provider: providerEl.value,
+            today: todayEl.value || null
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || "API error");
+        }
+        finalAnswerEl.textContent = data.final_answer || "";
+        toolCallsEl.textContent = JSON.stringify(data.tool_calls || [], null, 2);
+        savedOrderEl.textContent = JSON.stringify(
+          { saved_order_path: data.saved_order_path, saved_order: data.saved_order },
+          null,
+          2
+        );
+      } catch (error) {
+        finalAnswerEl.textContent = "Lỗi khi chạy test.";
+        toolCallsEl.textContent = String(error);
+        savedOrderEl.textContent = "null";
+      } finally {
+        runBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

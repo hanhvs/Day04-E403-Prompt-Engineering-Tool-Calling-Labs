@@ -1,0 +1,63 @@
+{
+  "order_id": "ORD-A0EB80E1D8",
+  "created_at": "2026-06-01",
+  "status": "confirmed",
+  "customer": {
+    "name": "Linh Phạm",
+    "phone": "0913002244",
+    "email": "linhpham.pm@example.com",
+    "shipping_address": "55 Nguyễn Đình Chiểu, Hai Bà Trưng, Hà Nội, số điện thoại 0913002244. Chốt 1 Lenovo ThinkPad E14 Gen 6; 2 Samsung ViewFinity S6 34; 1 Logitech MX Keys S; 1 Anker 563 USB-C Dock"
+  },
+  "items": [
+    {
+      "product_id": "DK-001",
+      "sku": "ANK-563-DOCK",
+      "name": "Anker 563 USB-C Dock",
+      "category": "dock",
+      "quantity": 1,
+      "unit_price": 4990000,
+      "line_total": 4990000
+    },
+    {
+      "product_id": "KB-002",
+      "sku": "LOG-MXKEYSS",
+      "name": "Logitech MX Keys S",
+      "category": "keyboard",
+      "quantity": 1,
+      "unit_price": 2790000,
+      "line_total": 2790000
+    },
+    {
+      "product_id": "LT-004",
+      "sku": "LEN-E14-G6",
+      "name": "Lenovo ThinkPad E14 Gen 6",
+      "category": "laptop",
+      "quantity": 1,
+      "unit_price": 18900000,
+      "line_total": 18900000
+    },
+    {
+      "product_id": "MN-004",
+      "sku": "SAM-VFS6-34",
+      "name": "Samsung ViewFinity S6 34",
+      "category": "monitor",
+      "quantity": 1,
+      "unit_price": 12990000,
+      "line_total": 12990000
+    }
+  ],
+  "pricing": {
+    "currency": "VND",
+    "subtotal": 39670000,
+    "discount_rate": 0.1,
+    "discount_amount": 3967000,
+    "final_total": 35703000
+  },
+  "discount": {
+    "campaign_code": "FLASH-10",
+    "customer_tier": "standard"
+  },
+  "notes": "",
+  "save_path": "artifacts/orders/ORD-A0EB80E1D8.json",
+  "source": "llm-order-agent"
+}
